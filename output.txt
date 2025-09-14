@@ -1,0 +1,691 @@
+File Path: C:\Users\Pawan\Desktop\Langchain-Langgraph\src\basics\index.ts
+Contents:
+import OpenAI from "openai";
+import dotenv from "dotenv";
+import fs from "fs/promises";
+import path from "path";
+
+// Load environment variables from .env file
+// This makes variables like GROQ_API_KEY available via process.env
+dotenv.config();
+
+// =============================================================================
+// CONFIGURATION VALIDATION
+// =============================================================================
+
+/**
+ * Validate that the required Groq API key is available in environment variables
+ * This is essential for authenticating with the Groq API service
+ * @throws {Error} If GROQ_API_KEY is not defined in environment variables
+ */
+if (!process.env.GROQ_API_KEY) {
+	throw new Error("GROQ_API_KEY is not defined in environment variables");
+}
+
+// =============================================================================
+// OPENAI CLIENT CONFIGURATION
+// =============================================================================
+
+/**
+ * OpenAI client instance configured for Groq API
+ * Uses Groq's custom endpoint instead of standard OpenAI API
+ * This allows access to Groq's specialized language models
+ */
+export const client = new OpenAI({
+	apiKey: process.env.GROQ_API_KEY, // API key for authentication
+	baseURL: "https://api.groq.com/openai/v1", // Groq-specific API endpoint
+});
+
+// =============================================================================
+// FILE UTILITY FUNCTIONS
+// =============================================================================
+
+/**
+ * Saves API response data to a JSON file in the data directory
+ * Creates the data directory if it doesn't exist
+ *
+ * @param data - The response data to be saved (typically API response object)
+ * @param filename - Optional custom filename (default: "response.json")
+ * @returns {Promise<string>} Path to the saved file
+ * @throws {Error} If file writing fails
+ */
+async function saveResponseToFile(
+	data: any,
+	filename: string = "response.json"
+): Promise<string> {
+	try {
+		// Create data directory in current working directory if it doesn't exist
+		// recursive: true ensures parent directories are also created if needed
+		const dataDir = path.join(process.cwd(), "data");
+		await fs.mkdir(dataDir, { recursive: true });
+
+		// Create full file path by combining directory and filename
+		const filePath = path.join(dataDir, filename);
+
+		// Write JSON data to file with proper formatting (2-space indentation)
+		await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+
+		console.log(`Response saved to: ${filePath}`);
+		return filePath;
+	} catch (error) {
+		console.error("Error saving file:", error);
+		throw error; // Re-throw to allow caller to handle the error
+	}
+}
+
+// =============================================================================
+// MAIN EXECUTION FUNCTION
+// =============================================================================
+
+/**
+ * Main function that demonstrates Groq API usage with chat completions
+ * Sends a conversation to the AI model and saves the response to a file
+ * Includes example conversation about the Target Sum coding problem
+ */
+async function main() {
+	try {
+		// Send chat completion request to Groq API
+		const response = await client.chat.completions.create({
+			model: "openai/gpt-oss-20b", // Groq's model variant
+			messages: [
+				{
+					role: "system",
+					content: "You are a helpful coding assistant.",
+				},
+				{
+					role: "user",
+					content: "Hello, how are you?",
+				},
+				{
+					role: "assistant",
+					content: "I'm good! How can I help you today?",
+				},
+				{
+					role: "user",
+					content:
+						"Kindly provide me with the JavaScript code solution for the Target Sum problem",
+				},
+			],
+		});
+
+		// Save the complete API response to a JSON file for later analysis
+		// Use timestamp in filename to avoid overwriting previous responses
+		const filename = `response_${Date.now()}.json`;
+		const filePath = await saveResponseToFile(response, filename);
+
+		// Display the AI's response content in the console
+		console.log("AI Response:", response.choices[0]?.message?.content);
+		console.log(`Full response saved to: ${filePath}`);
+	} catch (error) {
+		// Handle any errors that occur during API call or file operations
+		console.error("Error in main function:", error);
+	}
+}
+
+// =============================================================================
+// EXECUTION ENTRY POINT
+// =============================================================================
+
+/**
+ * Execute the main function
+ * This is the entry point when the file is run directly
+ */
+main().catch((error) => {
+	console.error("Unhandled error in execution:", error);
+	process.exit(1); // Exit with error code
+});
+
+--------------------------------------------------
+
+File Path: C:\Users\Pawan\Desktop\Langchain-Langgraph\src\chat-bot\index.ts
+Contents:
+import dotenv from "dotenv";
+import promptSync from "prompt-sync";
+import { ChatCompletionMessageParam } from "openai/resources/index";
+import OpenAI from "openai";
+
+// =============================================================================
+// ENVIRONMENT CONFIGURATION
+// =============================================================================
+
+/**
+ * Load environment variables from .env file
+ * This makes variables like GROQ_API_KEY available via process.env
+ */
+dotenv.config();
+
+// =============================================================================
+// API CONFIGURATION VALIDATION
+// =============================================================================
+
+/**
+ * Validate that the required Groq API key is available in environment variables
+ * This is essential for authenticating with the Groq API service
+ * @throws {Error} If GROQ_API_KEY is not defined in environment variables
+ */
+if (!process.env.GROQ_API_KEY) {
+	throw new Error("GROQ_API_KEY is not defined in environment variables");
+}
+
+// =============================================================================
+// OPENAI CLIENT CONFIGURATION
+// =============================================================================
+
+/**
+ * OpenAI client instance configured for Groq API
+ * Uses Groq's custom endpoint instead of standard OpenAI API
+ * This allows access to Groq's specialized language models
+ */
+export const client = new OpenAI({
+	apiKey: process.env.GROQ_API_KEY, // API key for authentication
+	baseURL: "https://api.groq.com/openai/v1", // Groq-specific API endpoint
+});
+
+// =============================================================================
+// CHAT MEMORY MANAGEMENT
+// =============================================================================
+
+/**
+ * Array storing the conversation history between user and AI assistant
+ * Maintains context throughout the chat session using ChatCompletionMessageParam format
+ * Starts with a system message defining the assistant's behavior and role
+ */
+const chatMemory: ChatCompletionMessageParam[] = [
+	{
+		role: "system",
+		content: `You are my personal AI assistant. Your role is to provide clear, accurate, and well-structured responses to my queries. Always explain concepts in a simple way, offer practical examples when needed, and ensure your answers are relevant to my context as a software developer. If code is requested, provide clean, working, and well-commented code. Stay professional, concise, and supportive.`,
+	},
+];
+
+// =============================================================================
+// CHAT COMPLETION FUNCTION
+// =============================================================================
+
+/**
+ * Sends the current conversation history to the AI model and processes the response
+ * Appends the AI's response to the chat memory for context continuity
+ * @returns {Promise<void>} No return value, but updates chatMemory and logs response
+ */
+const chatCompletion = async (): Promise<void> => {
+	// Send the entire conversation history to Groq API
+	const response = await client.chat.completions.create({
+		model: "openai/gpt-oss-20b", // Groq's model variant
+		messages: chatMemory, // Entire conversation context
+	});
+
+	// Extract the AI's response message from the API response
+	const responseMessage = response.choices[0].message;
+
+	// Add the AI's response to the conversation history for future context
+	chatMemory.push({
+		role: responseMessage.role,
+		content: responseMessage.content,
+	});
+
+	// Display the AI's response in the console with role information
+	console.log(
+		`Assistant: ${responseMessage.role}, ${responseMessage.content}`
+	);
+};
+
+// =============================================================================
+// MAIN CHAT LOOP FUNCTION
+// =============================================================================
+
+/**
+ * Main chat loop that handles user interaction in a continuous conversation
+ * Provides a REPL (Read-Eval-Print Loop) interface for chatting with AI
+ * Supports exit command to terminate the chat session
+ */
+const main = async (): Promise<void> => {
+	// Initialize prompt-sync for reading user input from command line
+	// sigint: true allows users to exit with Ctrl+C
+	const input = promptSync({ sigint: true });
+
+	console.log("Chat bot started. Type 'exit' to end the conversation.\n");
+
+	// Continuous chat loop until user exits
+	while (true) {
+		// Read user input from command line
+		const userInput = input("Enter your message : ");
+
+		// Check if user wants to exit the chat
+		if (userInput.toLocaleLowerCase() === "exit") {
+			console.log("Exiting chat bot...");
+			break; // Exit the loop
+		}
+
+		// Add user's message to the conversation history
+		chatMemory.push({
+			role: "user",
+			content: userInput,
+		});
+
+		// Get AI response and continue the conversation
+		await chatCompletion();
+	}
+};
+
+// =============================================================================
+// APPLICATION ENTRY POINT
+// =============================================================================
+
+/**
+ * Execute the main chat function
+ * This is the entry point when the file is run directly
+ * Handles any uncaught errors at the application level
+ */
+main().catch((error) => {
+	console.error("Unexpected error in chat bot:", error);
+	process.exit(1); // Exit with error code
+});
+
+--------------------------------------------------
+
+File Path: C:\Users\Pawan\Desktop\Langchain-Langgraph\src\tool-chat\index.ts
+Contents:
+import {
+	ChatCompletionMessageParam,
+	ChatCompletionTool,
+} from "openai/resources/index";
+import dotenv from "dotenv";
+import OpenAI from "openai";
+import nodemailer from "nodemailer";
+
+// =============================================================================
+// ENVIRONMENT CONFIGURATION
+// =============================================================================
+
+/**
+ * Load environment variables from .env file
+ * This makes variables like GROQ_API_KEY available via process.env
+ */
+dotenv.config();
+
+// =============================================================================
+// API CONFIGURATION VALIDATION
+// =============================================================================
+
+/**
+ * Validate that the required Groq API key is available in environment variables
+ * This is essential for authenticating with the Groq API service
+ * @throws {Error} If GROQ_API_KEY is not defined in environment variables
+ */
+if (!process.env.GROQ_API_KEY) {
+	throw new Error("GROQ_API_KEY is not defined in environment variables");
+}
+
+// =============================================================================
+// OPENAI CLIENT CONFIGURATION
+// =============================================================================
+
+/**
+ * OpenAI client instance configured for Groq API
+ * Uses Groq's custom endpoint instead of standard OpenAI API
+ * This allows access to Groq's specialized language models
+ */
+export const client = new OpenAI({
+	apiKey: process.env.GROQ_API_KEY, // API key for authentication
+	baseURL: "https://api.groq.com/openai/v1", // Groq-specific API endpoint
+});
+
+// =============================================================================
+// CONFIGURATION CONSTANTS
+// =============================================================================
+
+/**
+ * Email configuration constants loaded from environment variables
+ * These are used for authenticating with the email service
+ */
+const EMAIL_PASS = process.env.EMAIL_PASSWORD; // Email service password/App password
+const EMAIL_USER = process.env.EMAIL_ID; // Email account username/address
+
+// =============================================================================
+// TYPE DEFINITIONS
+// =============================================================================
+
+/**
+ * Type definition for tool functions
+ * Tool functions can be either synchronous or asynchronous
+ * They accept any arguments and return a string or promise that resolves to string
+ */
+export type ToolFunction = (args: any) => Promise<string> | string;
+
+// =============================================================================
+// TOOL FUNCTIONS IMPLEMENTATION
+// =============================================================================
+
+/**
+ * Email sending tool function
+ * Sends a text-based email using Nodemailer with Gmail service
+ * @param args - Object containing email details
+ * @param args.to - Recipient email address (required)
+ * @param args.subject - Email subject line (required)
+ * @param args.text - Email body content (required)
+ * @param args.from - Sender email address (optional, defaults to configured email)
+ * @returns Success message with message ID or error message
+ */
+const sendEmail: ToolFunction = async (args: {
+	to: string;
+	subject: string;
+	text: string;
+	from?: string;
+}) => {
+	try {
+		// Validate that required environment variables are set
+		if (!EMAIL_USER || !EMAIL_PASS) {
+			throw new Error(
+				"EMAIL_USER and EMAIL_PASS must be defined in environment variables"
+			);
+		}
+
+		// Validate that all required email parameters are provided
+		if (!args.to || !args.subject || !args.text) {
+			throw new Error("Recipient, subject, and text are required");
+		}
+
+		// Create Nodemailer transporter configuration
+		// Uses Gmail service with authentication credentials
+		const transporter = nodemailer.createTransport({
+			service: "gmail",
+			auth: {
+				user: EMAIL_USER,
+				pass: EMAIL_PASS,
+			},
+		});
+
+		// Verify connection to email server before sending
+		await transporter.verify();
+
+		// Configure email options with provided parameters
+		const mailOptions = {
+			from: args.from || EMAIL_USER!, // Use provided from address or default
+			to: args.to,
+			subject: args.subject,
+			text: args.text, // Text-based email content
+		};
+
+		// Send the email and get delivery information
+		const info = await transporter.sendMail(mailOptions);
+
+		// Return success message with recipient and message ID
+		return `Email sent successfully to ${args.to}. Message ID: ${info.messageId}`;
+	} catch (error) {
+		// Handle errors gracefully and return meaningful error message
+		const errorMessage =
+			error instanceof Error ? error.message : "Unknown error occurred";
+		return `Failed to send email: ${errorMessage}`;
+	}
+};
+
+/**
+ * Temperature lookup tool function
+ * Mock function that returns temperature data for predefined cities
+ * In a real implementation, this would call a weather API
+ * @param location - City name to get temperature for
+ * @returns Temperature string or "not available" message
+ */
+export const getTemperature: ToolFunction = (location: string) => {
+	// Mock temperature data for demonstration purposes
+	const temperatures: Record<string, string> = {
+		"New York": "22°C",
+		London: "18°C",
+		Tokyo: "26°C",
+		Sydney: "20°C",
+	};
+
+	// Return temperature if available, otherwise not available message
+	return temperatures[location] || "Temperature data not available";
+};
+
+/**
+ * Weather condition lookup tool function
+ * Mock function that returns weather condition for predefined cities
+ * In a real implementation, this would call a weather API
+ * @param location - City name to get weather condition for
+ * @returns Weather condition string or "not available" message
+ */
+export const getWeatherCondition: ToolFunction = (location: string) => {
+	// Mock weather condition data for demonstration purposes
+	const conditions: Record<string, string> = {
+		"New York": "Sunny",
+		London: "Rainy",
+		Tokyo: "Cloudy",
+		Sydney: "Clear",
+	};
+
+	// Return weather condition if available, otherwise not available message
+	return conditions[location] || "Weather condition data not available";
+};
+
+// =============================================================================
+// TOOL REGISTRY AND CONFIGURATION
+// =============================================================================
+
+/**
+ * Registry of available tool functions
+ * Maps function names to their implementations
+ * Used to look up and execute tools when called by the AI assistant
+ */
+const availableFunctions: Record<string, ToolFunction> = {
+	getTemperature,
+	getWeatherCondition,
+	sendEmail,
+};
+
+/**
+ * Tool definitions for OpenAI function calling
+ * These describe the available tools to the AI model including:
+ * - Function names and descriptions
+ * - Parameter schemas with types and validation rules
+ * - Required parameters for each function
+ */
+const TOOLS: ChatCompletionTool[] = [
+	{
+		type: "function",
+		function: {
+			name: "getTemperature",
+			description: "Get the temperature for a given location",
+			parameters: {
+				type: "object",
+				properties: {
+					location: {
+						type: "string",
+						description: "The name of the city",
+					},
+				},
+				required: ["location"], // Location parameter is mandatory
+			},
+		},
+	},
+	{
+		type: "function",
+		function: {
+			name: "getWeatherCondition",
+			description: "Get the weather condition for a given location",
+			parameters: {
+				type: "object",
+				properties: {
+					location: {
+						type: "string",
+						description: "The name of the city",
+					},
+				},
+				required: ["location"], // Location parameter is mandatory
+			},
+		},
+	},
+	{
+		type: "function",
+		function: {
+			name: "sendEmail",
+			description: "Send a text-based email to a recipient",
+			parameters: {
+				type: "object",
+				properties: {
+					to: {
+						type: "string",
+						description: "Recipient email address",
+					},
+					subject: {
+						type: "string",
+						description: "Email subject",
+					},
+					text: {
+						type: "string",
+						description: "Email body text content",
+					},
+					from: {
+						type: "string",
+						description:
+							"Sender email address (optional, defaults to configured email)",
+					},
+				},
+				required: ["to", "subject", "text"], // Essential email parameters
+			},
+		},
+	},
+];
+
+// =============================================================================
+// CONVERSATION SETUP
+// =============================================================================
+
+/**
+ * Conversation message history
+ * Contains system instructions and user messages
+ * Maintains context for the AI assistant throughout the conversation
+ */
+const messages: ChatCompletionMessageParam[] = [
+	{
+		role: "system",
+		content: `You are a helpful assistant that can provide weather information and send emails. 
+                 For weather queries, use the appropriate tools to get accurate data.
+                 For sending emails, make sure you have all required information: recipient email, subject, and message content.`,
+	},
+	{
+		role: "user",
+		content:
+			"Get the weather for New York and send it to my friend at nightdevilpt@gmail.com with subject 'Weather Report'",
+	},
+];
+
+// =============================================================================
+// MAIN ASSISTANT FUNCTION
+// =============================================================================
+
+/**
+ * Main assistant function that handles the conversation with AI
+ * Supports multiple iterations of tool calling and response generation
+ * @returns Final AI response content after processing all tool calls
+ * @throws Error if maximum iterations reached or other errors occur
+ */
+export async function runAssistant() {
+	try {
+		// Safety mechanism to prevent infinite loops in tool calling
+		let maxIterations = 10;
+		let currentIteration = 0;
+
+		// Main conversation loop - continues until final response or max iterations
+		while (currentIteration < maxIterations) {
+			currentIteration++;
+
+			// Send conversation to AI model with available tools
+			const response = await client.chat.completions.create({
+				model: "openai/gpt-oss-20b", // Groq's model name
+				messages, // Conversation history
+				tools: TOOLS, // Available functions
+				temperature: 0.5, // Creativity control (0.0-1.0)
+				tool_choice: "auto", // Let AI decide when to use tools
+			});
+
+			const responseMessage = response.choices[0].message;
+
+			// Check if AI has a final response (no more tool calls needed)
+			if (
+				!responseMessage.tool_calls ||
+				responseMessage.tool_calls.length === 0
+			) {
+				return responseMessage.content;
+			}
+
+			// Add AI's message (which may contain tool calls) to conversation history
+			messages.push(responseMessage);
+
+			// Process each tool call in the AI's response
+			for (const toolCall of responseMessage.tool_calls) {
+				if ("function" in toolCall) {
+					const functionName = toolCall.function.name;
+					const functionToCall = availableFunctions[functionName];
+
+					if (functionToCall) {
+						// Parse function arguments from JSON string
+						const functionArgs = JSON.parse(
+							toolCall.function.arguments
+						);
+						let functionResponse;
+
+						// Handle asynchronous functions (like email sending)
+						if (functionName === "sendEmail") {
+							functionResponse = await functionToCall(
+								functionArgs
+							);
+						} else {
+							// Handle synchronous functions (weather tools)
+							functionResponse = functionToCall(
+								functionArgs.location || functionArgs
+							);
+						}
+
+						// Add tool execution result back to conversation history
+						// This allows AI to use the tool results in subsequent responses
+						messages.push({
+							role: "tool",
+							content: functionResponse,
+							tool_call_id: toolCall.id, // Links response to specific tool call
+						} as ChatCompletionMessageParam);
+
+						// Log tool execution details for debugging and monitoring
+						console.log(
+							`\n===============[ TOOL EXECUTION START ]================\n
+							Function Name: ${functionName}\n
+							Function Arguments: ${toolCall.function.arguments}\n
+							Tool Details: ${JSON.stringify(toolCall.function, null, 2)}
+							\n===============[ TOOL EXECUTION END ]===============\n`
+						);
+					}
+				}
+			}
+		}
+
+		// Safety mechanism - break out if too many iterations
+		throw new Error(
+			"Maximum iteration limit reached without final response"
+		);
+	} catch (error) {
+		// Log detailed error information
+		console.error("An error occurred in runAssistant:", error);
+		throw error; // Re-throw to allow caller to handle the error
+	}
+}
+
+// =============================================================================
+// EXECUTION ENTRY POINT
+// =============================================================================
+
+/**
+ * Main execution entry point
+ * Runs the assistant and handles the results or errors
+ */
+runAssistant()
+	.then((result) => {
+		// Success case - log the final AI response
+		console.log("Final result:", result);
+	})
+	.catch((error) => {
+		// Error case - log the execution error
+		console.error("Error in main execution:", error);
+	});
+
+--------------------------------------------------
+
