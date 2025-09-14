@@ -26,8 +26,8 @@ It includes three main scripts:
 1. Clone the repository:
 
    ```bash
-   git clone <repository-url>
-   cd langchain-langgraph
+   git clone git@github.com:NightDevilPT/open-ai-tutorial.git
+   cd open-ai-tutorial
    ```
 
 2. Install dependencies:
@@ -97,3 +97,4 @@ It includes three main scripts:
 * [`dotenv`](https://www.npmjs.com/package/dotenv) → Load environment variables
 * [`nodemailer`](https://www.npmjs.com/package/nodemailer) → Send emails (tool-chat)
 * [`prompt-sync`](https://www.npmjs.com/package/prompt-sync) → CLI input handling
+
