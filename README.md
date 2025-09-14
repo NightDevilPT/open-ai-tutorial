@@ -1,4 +1,4 @@
-# Langchain-Langgraph
+# OpenAI SDK Tutorial ( with Langchain)
 
 A **TypeScript project** demonstrating how to interact with the **Groq API** using OpenAI’s client library.
 It includes three main scripts:
@@ -97,4 +97,5 @@ It includes three main scripts:
 * [`dotenv`](https://www.npmjs.com/package/dotenv) → Load environment variables
 * [`nodemailer`](https://www.npmjs.com/package/nodemailer) → Send emails (tool-chat)
 * [`prompt-sync`](https://www.npmjs.com/package/prompt-sync) → CLI input handling
+
 
